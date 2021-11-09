@@ -1,7 +1,10 @@
+
 #include <stdio.h>
 #include <stdint-gcc.h>
 #include <malloc.h>
 #include <string.h>
+
+#include "asprintf.h"
 
 uint32_t s_box[4][256] = {
         {
@@ -192,9 +195,92 @@ uint32_t keys[18] = {
         0xc0ac29b7, 0xc97c50dd, 0x3f84d5b5, 0xb5470917, 0x9216d5d9, 0x8979fb1b,
 };
 
+uint64_t degree_of_two(int n) {
+    return 1 << n;
+}
+
+int get_bit(uint32_t n, int i) {
+    return (n & degree_of_two(i)) ? 1 : 0;
+}
+
+char *binary_format(uint64_t n) {
+    if (n == 0)
+        return 0;
+    char *binary_number = "";
+    do
+        asprintf(&binary_number, "%d%s", get_bit(n, 0), binary_number);
+    while (n >>= 1);
+    return binary_number;
+}
+
+uint32_t blowfish_function(uint32_t number) {
+    return ((s_box[0][(number >> 24 & 0xFF)] + s_box[1][(number >> 16) & 0xFF]) ^
+            s_box[2][(number >> 8) & 0xFF]) + s_box[3][(number) & 0xFF];
+}
+
+void print_as_bytes(uint64_t buffer) {
+    printf("[%lu %lu %lu %lu %lu %lu %lu %lu]\n",
+           ((buffer >> 56) & 0xFF), ((buffer >> 48) & 0xFF),
+           ((buffer >> 40) & 0xFF), ((buffer >> 40) & 0xFF),
+           ((buffer >> 32) & 0xFF), ((buffer >> 24) & 0xFF),
+           ((buffer >> 16) & 0xFF), ((buffer >> 8) & 0xFF));
+}
+
+uint64_t code(const char *buffer) {
+    uint64_t prev_left = buffer[0] << 24 | buffer[1] << 16 | buffer[2] << 8 | buffer[3];
+    uint64_t prev_right = buffer[4] << 24 | buffer[5] << 16 | buffer[6] << 8 | buffer[7];
+    print_as_bytes(prev_left);
+    print_as_bytes(prev_right);
+    printf("origin line:\n   [%32s%32s]\n", binary_format(prev_left), binary_format(prev_right));
+    uint64_t left;
+    uint64_t right;
+    for (int round = 1; round <= 16; ++round) {
+        right = prev_left ^ keys[round - 1];
+        left = prev_right ^ blowfish_function(right);
+        prev_right = right;
+        prev_left = left;
+        printf("%-2d:[%32s%32s]\n", round, binary_format(left), binary_format(right));
+    }
+    left = prev_right;
+    right = prev_left;
+    printf("17:[%32s%32s]\n", binary_format(left), binary_format(right));
+    left ^= keys[17];
+    right ^= keys[16];
+    printf("18:[%32s%32s]\n", binary_format(left), binary_format(right));
+    return (left << 32) | right;
+}
+
+uint64_t decode(uint64_t buffer) {
+    uint64_t prev_left = ((buffer >> 56) & 0xFF) << 24 |
+                         ((buffer >> 48) & 0xFF) << 16 |
+                         ((buffer >> 40) & 0xFF) << 8 |
+                         (buffer >> 32 & 0xFF);
+    uint64_t prev_right = ((buffer >> 24) & 0xFF) << 24 |
+                          ((buffer >> 16) & 0xFF) << 16 |
+                          ((buffer >> 8) & 0xFF) << 8 |
+                          (buffer & 0xFF);
+    printf("[%32s%32s]\n", binary_format(prev_left), binary_format(prev_right));
+    uint64_t left;
+    uint64_t right;
+    for (int round = 16; round > 0; --round) {
+        right = prev_left ^ keys[round - 1];
+        left = prev_right ^ blowfish_function(right);
+        prev_right = right;
+        prev_left = left;
+    }
+    left = prev_right;
+    right = prev_left;
+    left ^= keys[17];
+    right ^= keys[16];
+    uint64_t line = (left << 32) | right;
+    return line;
+}
+
+
+
 int main() {
     FILE *text_file = fopen("text.txt", "r");
-    if (text_file == NULL){
+    if (text_file == NULL) {
         printf("Error while opening file");
         return 1;
     }
@@ -205,14 +291,17 @@ int main() {
     }
     size_t number_of_read_bytes = fread(buffer, 1, 8, text_file);
     while (number_of_read_bytes != 0) {
-        char* left = (char *) malloc(sizeof(char) * 4);
-        strncpy(left, buffer, 4);
-        char* right = (char *) malloc(sizeof(char) * 4);
-        strncpy(right, buffer + 4, 4);
-        printf("%s | %s | %s\n", buffer, left, right);
+        printf("line:\n{%s}\n", buffer);
+        uint64_t coded_line = code(buffer);
+        print_as_bytes(coded_line);
+        //printf("coded_line:\n[%64s]\n", binary_format(coded_line));
+        uint64_t decoded_line = decode(coded_line);
+        print_as_bytes(decoded_line);
+        printf("decoded_line:\n[%64s]\n", binary_format(decoded_line));
         number_of_read_bytes = fread(buffer, 1, 8, text_file);
     }
     free(buffer);
     return 0;
 }
+
 
