@@ -1,8 +1,11 @@
-
 #include <stdio.h>
 #include <stdint-gcc.h>
 #include <malloc.h>
 #include <string.h>
+#include <bits/types/time_t.h>
+#include <time.h>
+#include <stdlib.h>
+#include <inttypes.h>
 
 #include "asprintf.h"
 
@@ -195,6 +198,11 @@ uint32_t keys[18] = {
         0xc0ac29b7, 0xc97c50dd, 0x3f84d5b5, 0xb5470917, 0x9216d5d9, 0x8979fb1b,
 };
 
+#define read_line(line, file_name, actual_length)                   \
+        static size_t length = 0;         \
+        (actual_length) = getline(&(line), &length, file_name); \
+        (line)[strlen(line) - 1] = 0;
+
 uint64_t degree_of_two(int n) {
     return 1 << n;
 }
@@ -210,6 +218,8 @@ char *binary_format(uint64_t n) {
     do
         asprintf(&binary_number, "%d%s", get_bit(n, 0), binary_number);
     while (n >>= 1);
+    while (strlen(binary_number) < 32)
+        asprintf(&binary_number, "%d%s", 0, binary_number);
     return binary_number;
 }
 
@@ -218,68 +228,85 @@ uint32_t blowfish_function(uint32_t number) {
             s_box[2][(number >> 8) & 0xFF]) + s_box[3][(number) & 0xFF];
 }
 
-void print_as_bytes(uint64_t buffer) {
-    printf("[%lu %lu %lu %lu %lu %lu %lu %lu]\n",
-           ((buffer >> 56) & 0xFF), ((buffer >> 48) & 0xFF),
-           ((buffer >> 40) & 0xFF), ((buffer >> 40) & 0xFF),
-           ((buffer >> 32) & 0xFF), ((buffer >> 24) & 0xFF),
-           ((buffer >> 16) & 0xFF), ((buffer >> 8) & 0xFF));
+char *print_as_bytes(uint64_t buffer) {
+    char *text = "";
+    asprintf(&text, "%c%c%c%c%c%c%c%c",
+             (char) ((buffer >> 56) & 0xFF),
+             (char) ((buffer >> 48) & 0xFF),
+             (char) ((buffer >> 40) & 0xFF),
+             (char) ((buffer >> 32) & 0xFF),
+             (char) ((buffer >> 24) & 0xFF),
+             (char) ((buffer >> 16) & 0xFF),
+             (char) ((buffer >> 8) & 0xFF),
+             (char) ((buffer) & 0xFF));
+    return text;
+}
+
+void round_function(uint32_t *left, uint32_t *right, uint32_t key) {
+    uint32_t temp;
+    *left ^= key;
+    temp = *left;
+    *left = blowfish_function(*left);
+    *left ^= *right;
+    *right = temp;
+}
+
+void swap(uint32_t *left, uint32_t *right) {
+    uint32_t buffer = *left;
+    *left = *right;
+    *right = buffer;
 }
 
 uint64_t code(const char *buffer) {
-    uint64_t prev_left = buffer[0] << 24 | buffer[1] << 16 | buffer[2] << 8 | buffer[3];
-    uint64_t prev_right = buffer[4] << 24 | buffer[5] << 16 | buffer[6] << 8 | buffer[7];
-    print_as_bytes(prev_left);
-    print_as_bytes(prev_right);
-    printf("origin line:\n   [%32s%32s]\n", binary_format(prev_left), binary_format(prev_right));
-    uint64_t left;
-    uint64_t right;
-    for (int round = 1; round <= 16; ++round) {
-        right = prev_left ^ keys[round - 1];
-        left = prev_right ^ blowfish_function(right);
-        prev_right = right;
-        prev_left = left;
-        printf("%-2d:[%32s%32s]\n", round, binary_format(left), binary_format(right));
-    }
-    left = prev_right;
-    right = prev_left;
-    printf("17:[%32s%32s]\n", binary_format(left), binary_format(right));
-    left ^= keys[17];
-    right ^= keys[16];
-    printf("18:[%32s%32s]\n", binary_format(left), binary_format(right));
-    return (left << 32) | right;
+    uint32_t prev_left = buffer[0] << 24 | buffer[1] << 16 | buffer[2] << 8 | buffer[3];
+    uint32_t prev_right = buffer[4] << 24 | buffer[5] << 16 | buffer[6] << 8 | buffer[7];
+    for (int round = 0; round < 16; ++round)
+        round_function(&prev_left, &prev_right, keys[round]);
+    swap(&prev_left, &prev_right);
+    prev_left ^= keys[17];
+    prev_right ^= keys[16];
+    uint64_t number = prev_left;
+    number <<= 32;
+    number |= prev_right;
+    return number;
 }
 
 uint64_t decode(uint64_t buffer) {
-    uint64_t prev_left = ((buffer >> 56) & 0xFF) << 24 |
+    uint32_t prev_left = ((buffer >> 56) & 0xFF) << 24 |
                          ((buffer >> 48) & 0xFF) << 16 |
                          ((buffer >> 40) & 0xFF) << 8 |
                          (buffer >> 32 & 0xFF);
-    uint64_t prev_right = ((buffer >> 24) & 0xFF) << 24 |
+    uint32_t prev_right = ((buffer >> 24) & 0xFF) << 24 |
                           ((buffer >> 16) & 0xFF) << 16 |
                           ((buffer >> 8) & 0xFF) << 8 |
                           (buffer & 0xFF);
-    printf("[%32s%32s]\n", binary_format(prev_left), binary_format(prev_right));
-    uint64_t left;
-    uint64_t right;
-    for (int round = 16; round > 0; --round) {
-        right = prev_left ^ keys[round - 1];
-        left = prev_right ^ blowfish_function(right);
-        prev_right = right;
-        prev_left = left;
-    }
-    left = prev_right;
-    right = prev_left;
-    left ^= keys[17];
-    right ^= keys[16];
-    uint64_t line = (left << 32) | right;
-    return line;
+    for (int round = 17; round > 1; --round)
+        round_function(&prev_left, &prev_right, keys[round]);
+    swap(&prev_left, &prev_right);
+    prev_left ^= keys[0];
+    prev_right ^= keys[1];
+    uint64_t number = prev_left;
+    number <<= 32;
+    number |= prev_right;
+    return number;
 }
 
-
+uint64_t string_to_uint64(char *line) {
+    size_t left_size = strlen(line) / 2;
+    char *left = (char *) malloc(left_size * sizeof(char));
+    strncpy(left, line, left_size);
+    uint64_t deg = 1;
+    for (int i = 1; i < strlen(line) - left_size; ++i) {
+        deg *= 10;
+    }
+    uint64_t number = atoll(left) * deg;
+    uint64_t right = atoll(line + left_size);
+    free(left);
+    return number + right;
+}
 
 int main() {
-    FILE *text_file = fopen("text.txt", "r");
+    FILE *text_file = fopen("big_text.txt", "r");
     if (text_file == NULL) {
         printf("Error while opening file");
         return 1;
@@ -289,18 +316,34 @@ int main() {
         printf("Error while allocating memory");
         return 1;
     }
+    time_t start_time = time(NULL);
     size_t number_of_read_bytes = fread(buffer, 1, 8, text_file);
+    FILE *code_file = fopen("coded.txt", "w");
     while (number_of_read_bytes != 0) {
-        printf("line:\n{%s}\n", buffer);
         uint64_t coded_line = code(buffer);
-        print_as_bytes(coded_line);
-        //printf("coded_line:\n[%64s]\n", binary_format(coded_line));
-        uint64_t decoded_line = decode(coded_line);
-        print_as_bytes(decoded_line);
-        printf("decoded_line:\n[%64s]\n", binary_format(decoded_line));
+        fprintf(code_file, "%022lu\n", coded_line);
         number_of_read_bytes = fread(buffer, 1, 8, text_file);
     }
+    time_t finish_time = time(NULL);
+    printf("Process of coding finished after %ld sec\n", finish_time - start_time);
     free(buffer);
+    fclose(code_file);
+
+    code_file = fopen("coded.txt", "r");
+    start_time = time(NULL);
+    buffer = (char *) malloc(sizeof(char) * 23);
+    number_of_read_bytes = fread(buffer, 1, 23, code_file);
+    FILE *decode_file = fopen("decoded.txt", "w");
+    while (number_of_read_bytes != 0) {
+        //printf("%lu\n", string_to_uint64(buffer));
+        uint64_t decoded_line = decode(string_to_uint64(buffer));
+        fprintf(decode_file, "%s", print_as_bytes(decoded_line));
+        number_of_read_bytes = fread(buffer, 1, 23, code_file);
+    }
+    finish_time = time(NULL);
+    printf("Process of decoding finished after %ld sec\n", finish_time - start_time);
+    free(buffer);
+
     return 0;
 }
 
