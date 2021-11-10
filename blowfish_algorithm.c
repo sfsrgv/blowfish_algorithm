@@ -1,5 +1,4 @@
 #include "blowfish_algorithm.h"
-#include <stdint-gcc.h>
 
 uint32_t s_box[4][256] = {
         {
@@ -196,50 +195,46 @@ void swap(uint32_t *left, uint32_t *right) {
     *right = buffer;
 }
 
-uint32_t blowfish_function(uint32_t number) {
-    return ((s_box[0][(number >> 24 & 0xFF)] + s_box[1][(number >> 16) & 0xFF]) ^
-            s_box[2][(number >> 8) & 0xFF]) + s_box[3][(number) & 0xFF];
+uint32_t blowfish_function(const uint32_t* number) {
+    return ((s_box[0][(*number >> 24 & 0xFF)] + s_box[1][(*number >> 16) & 0xFF]) ^
+            s_box[2][(*number >> 8) & 0xFF]) + s_box[3][(*number) & 0xFF];
 }
 
-void round_function(uint32_t *left, uint32_t *right, uint32_t key) {
+void round_function(uint32_t *left, uint32_t *right, const uint32_t* key) {
     uint32_t temp;
-    *left ^= key;
+    *left ^= *key;
     temp = *left;
-    *left = blowfish_function(*left);
+    *left = blowfish_function(left);
     *left ^= *right;
     *right = temp;
 }
 
-uint64_t code(const char *buffer) {
-    uint32_t prev_left = buffer[0] << 24 | buffer[1] << 16 | buffer[2] << 8 | buffer[3];
-    uint32_t prev_right = buffer[4] << 24 | buffer[5] << 16 | buffer[6] << 8 | buffer[7];
-    for (int round = 0; round < 16; ++round)
-        round_function(&prev_left, &prev_right, keys[round]);
-    swap(&prev_left, &prev_right);
-    prev_left ^= keys[17];
-    prev_right ^= keys[16];
-    uint64_t number = prev_left;
-    number <<= 32;
-    number |= prev_right;
-    return number;
-}
-
-uint64_t decode(uint64_t buffer) {
-    uint32_t prev_left = ((buffer >> 56) & 0xFF) << 24 |
-                         ((buffer >> 48) & 0xFF) << 16 |
-                         ((buffer >> 40) & 0xFF) << 8 |
-                         (buffer >> 32 & 0xFF);
-    uint32_t prev_right = ((buffer >> 24) & 0xFF) << 24 |
-                          ((buffer >> 16) & 0xFF) << 16 |
-                          ((buffer >> 8) & 0xFF) << 8 |
-                          (buffer & 0xFF);
-    for (int round = 17; round > 1; --round)
-        round_function(&prev_left, &prev_right, keys[round]);
-    swap(&prev_left, &prev_right);
-    prev_left ^= keys[0];
-    prev_right ^= keys[1];
-    uint64_t number = prev_left;
-    number <<= 32;
-    number |= prev_right;
-    return number;
+uint64_t blowfish(uint64_t *number, int operation) {
+    uint32_t left;
+    uint32_t right;
+    split_uint64(number, &left, &right);
+    switch (operation) {
+        case CODE: {
+            for (int round = 0; round < 16; ++round)
+                round_function(&left, &right, &keys[round]);
+            swap(&left, &right);
+            left ^= keys[17];
+            right ^= keys[16];
+            break;
+        }
+        case DECODE:{
+            for (int round = 17; round > 1; --round)
+                round_function(&left, &right, &keys[round]);
+            swap(&left, &right);
+            left ^= keys[0];
+            right ^= keys[1];
+            break;
+        }
+        default:
+            return 0;
+    }
+    uint64_t code = left;
+    code <<= 32;
+    code |= right;
+    return code;
 }
