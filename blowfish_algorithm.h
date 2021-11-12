@@ -8,12 +8,16 @@
 #define CODE 0
 #define DECODE 1
 
+// Function to swap two 32-bytes numbers
 void swap(uint32_t *left, uint32_t *right);
 
+// Function used in round of blowfish algorithm
 uint32_t blowfish_function(const uint32_t* number);
 
+// One round of algorithm
 void round_function(uint32_t *left, uint32_t *right, const uint32_t* key);
 
+// Coding or decoding 64 bits using blowfish algorithm
 uint64_t blowfish(uint64_t *number, int operation);
 
 

@@ -1,5 +1,6 @@
 #include "blowfish_algorithm.h"
 
+// Matrix used to blowfish function generated from hex digits of pi
 uint32_t s_box[4][256] = {
         {
                 0xd1310ba6, 0x98dfb5ac, 0x2ffd72db, 0xd01adfb7, 0xb8e1afed, 0x6a267e96,
@@ -183,6 +184,7 @@ uint32_t s_box[4][256] = {
         },
 };
 
+// Keys used to blowfish function generated from hex digits of pi
 uint32_t keys[18] = {
         0x243f6a88, 0x85a308d3, 0x13198a2e, 0x03707344, 0xa4093822, 0x299f31d0,
         0x082efa98, 0xec4e6c89, 0x452821e6, 0x38d01377, 0xbe5466cf, 0x34e90c6c,
@@ -195,17 +197,15 @@ void swap(uint32_t *left, uint32_t *right) {
     *right = buffer;
 }
 
-uint32_t blowfish_function(const uint32_t* number) {
+uint32_t blowfish_function(const uint32_t *number) {
     return ((s_box[0][(*number >> 24 & 0xFF)] + s_box[1][(*number >> 16) & 0xFF]) ^
             s_box[2][(*number >> 8) & 0xFF]) + s_box[3][(*number) & 0xFF];
 }
 
-void round_function(uint32_t *left, uint32_t *right, const uint32_t* key) {
-    uint32_t temp;
+void round_function(uint32_t *left, uint32_t *right, const uint32_t *key) {
     *left ^= *key;
-    temp = *left;
-    *left = blowfish_function(left);
-    *left ^= *right;
+    uint32_t temp = *left;
+    *left = blowfish_function(left) ^ *right;
     *right = temp;
 }
 
@@ -222,7 +222,7 @@ uint64_t blowfish(uint64_t *number, int operation) {
             right ^= keys[16];
             break;
         }
-        case DECODE:{
+        case DECODE: {
             for (int round = 17; round > 1; --round)
                 round_function(&left, &right, &keys[round]);
             swap(&left, &right);

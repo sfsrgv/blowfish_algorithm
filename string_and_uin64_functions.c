@@ -1,17 +1,17 @@
-#include <time.h>
 #include "string_and_uin64_functions.h"
 
 char *make_array_of_chars_from_bytes(const uint64_t *buffer) {
     char *text = "";
-    asprintf(&text, "%c%c%c%c%c%c%c%c",
-             (char) ((*buffer >> 56) & 0xFF),
-             (char) ((*buffer >> 48) & 0xFF),
-             (char) ((*buffer >> 40) & 0xFF),
-             (char) ((*buffer >> 32) & 0xFF),
-             (char) ((*buffer >> 24) & 0xFF),
-             (char) ((*buffer >> 16) & 0xFF),
-             (char) ((*buffer >> 8) & 0xFF),
-             (char) ((*buffer) & 0xFF));
+    if (asprintf(&text, "%c%c%c%c%c%c%c%c",
+                 (char) ((*buffer >> 56) & 0xFF),
+                 (char) ((*buffer >> 48) & 0xFF),
+                 (char) ((*buffer >> 40) & 0xFF),
+                 (char) ((*buffer >> 32) & 0xFF),
+                 (char) ((*buffer >> 24) & 0xFF),
+                 (char) ((*buffer >> 16) & 0xFF),
+                 (char) ((*buffer >> 8) & 0xFF),
+                 (char) ((*buffer) & 0xFF)) == 0)
+        return NULL;
     return text;
 }
 
@@ -33,11 +33,11 @@ void split_uint64(const uint64_t *number, uint32_t *left, uint32_t *right) {
              (*number & 0xFF);
 }
 
-uint64_t convert_string_to_uint64(const char *line){
+uint64_t convert_string_to_uint64(const char *line) {
     uint64_t number = 0;
     for (size_t i = 0; i < strlen(line); ++i) {
         number *= 10;
-        number += (uint64_t)(line[i] - '0');
+        number += (uint64_t) (line[i] - '0');
     }
     return number;
 }
