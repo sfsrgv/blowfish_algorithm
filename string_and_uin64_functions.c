@@ -33,13 +33,9 @@ void split_uint64(const uint64_t *number, uint32_t *left, uint32_t *right) {
              (*number & 0xFF);
 }
 
-time_t global_time = 0;
-
-int64_t degree_of_ten[10] = {10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000, 10000000000};
-
 uint64_t convert_string_to_uint64(const char *line){
     uint64_t number = 0;
-    for (size_t i = 0; i <= strlen(line) - 2; ++i) {
+    for (size_t i = 0; i < strlen(line); ++i) {
         number *= 10;
         number += (uint64_t)(line[i] - '0');
     }
